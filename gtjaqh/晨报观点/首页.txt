@@ -1,0 +1,94 @@
+{set:"$output", "=":{code:0,msg:"成功",data:{}}},
+
+  
+// 获取白名单
+{set:"args", "=":{key:"morningPaperCodeWhitelist"}},
+{run:"fnpoint.get(6010,21)", from:"args", to:"morningPaperCodeWhitelist", as:"func"},
+{print:"'morningPaperCodeWhitelist=%s'", from:["json(morningPaperCodeWhitelist)"]},
+// 查询最新报道日期的数据 根据代码字段与数据库交集
+{set:"param", "=":"seq.map('morningPaperCodeWhitelist', morningPaperCodeWhitelist)"},
+{set:"conn", "=":"db.connect('dmp')"},
+{query:{sentence:""/*Q$={
+  SELECT
+    report_date, code_name, code, standpoint, score
+  FROM
+    t_code_strength_score
+  WHERE
+    report_date = (
+    SELECT max(report_date) FROM t_code_strength_score)
+  AND code in (${codes})
+  AND status = 1
+  }=Q$*/, result:"SET", param:[
+  {name:"codes",type:"STRING",value:"morningPaperCodeWhitelist",list:true}
+]}, from:"param", to:"newdateList", as:{}, by:"conn"},
+ 
+// 计算看多 看空 中
+{set:"more", "=":"0"},
+{set:"medium", "=":"0"},
+{set:"less", "=":"0"},
+  
+// 强 偏强 中性 偏弱 弱
+{set:"strong", "=":[]},
+{set:"stronger", "=":[]},
+{set:"normal", "=":[]},
+{set:"weaker", "=":[]},
+{set:"weak", "=":[]},
+
+// 跑马灯显示品种
+{set:"codeList", "=":[]},
+  
+{for:["index","item"], in:"newdateList", as:"list", loop:[
+      
+  {set:"standpoint", "=":"item.standpoint"},
+  {set:"codename", "=":"item.code_name"},
+  // 观点不为空
+  {if:"standpoint!=nil && string.length(standpoint)!=0", then:[
+    {set:"mp", "=":"seq.map('codeName',codename,'standPoint',standpoint)"},
+    {set:"codeList", "+=":"mp"}
+  ]},
+  
+  {set:"score", "=":"map.get(item,'score')"},
+//     {trace:"'score=%s'", from:["score"]},    
+  {if:"score==4 || score==5" ,then:[
+    {if:"score==5" ,then:[
+      {set:"strong", "+=":"codename"}
+    ] ,else:[
+      {set:"stronger", "+=":"codename"}
+    ]},
+    {set:"more", "=":"more+1"}
+  ],else:[
+    {if:"score==3" ,then:[
+      {set:"normal", "+=":"codename"},
+      {set:"medium", "=":"medium+1"}
+    ] ,else:[
+      {if:"score==2 || score==1", then:[
+        {if:"score==1" ,then:[
+          {set:"weak", "+=":"codename"}
+        ] ,else:[
+          {set:"weaker", "+=":"codename"}
+        ]},
+        {set:"less", "=":"less+1"}
+      ]}
+    ]}
+  ]}
+      
+]},
+
+// 强度分类
+{set:"strengthList", "=":"seq.map('strong',strong,'stronger',stronger,'normal',normal,'weaker',weaker,'weak',weak)"},
+  
+// 计算强度
+{set:"strength", "=":"1.0 * more / list.size(newdateList) * 5"},
+{set:"strength", "=":"math.round(strength,1)"},
+  
+{set:"data", "=":{}},
+{set:"data.date", "=":"map.get(newdateList[0],'report_date')"},
+{set:"data.codeList", "=":"codeList"},
+{set:"data.more", "=":"more"},
+{set:"data.medium", "=":"medium"},
+{set:"data.less", "=":"less"},
+{set:"data.strength", "=":"strength"},
+{set:"data.strengthList", "=":"strengthList"},
+{set:"$output.data", "=":"data"},
+ 
+{return:"$output"}

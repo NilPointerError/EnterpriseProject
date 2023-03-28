@@ -1,0 +1,55 @@
+{set:"$output", "=":{code:0,msg:"成功",data:{}}},
+
+// 读取上传的xlsx文件
+{set:"excelfile", "=":"$upload[0]"},
+{set:"filename", "=":"excelfile.file"},
+{set:"stream_xlsx", "=":"file.xlsx(filename,'r')"},
+{set:"sheet_bool", "=":"istream.excel.sheet(stream_xlsx, 0)"},
+{set:"row", "=":"istream.nextRow(stream_xlsx, 1)"}, // 跳过第一行
+
+// 读取数据的结果集
+{set:"rst_list", "=":"seq.list()"},
+
+{for:["index_stream","row"], in:"stream_xlsx", as:"inputstream", loop:[
+  {read:{format:"excel",field:[
+    {ref:"B1",value:"name",type:"string"},
+    {ref:"C1",value:"code",type:"string"}
+  ]},from:"row", to:"rst", as:{}},
+  {set:"rst_list", "+=":"rst"}
+]},
+
+
+// 存在数据，先把原有的删除
+// {if:"list.size(resultList) > 0" ,then:[
+//   {update:{sentence:""/*Q$={
+//   DELETE FROM core_methodcase
+// }=Q$*/,param:[]}, from:"param", with:"param", to:"affect",by:"conn"}
+// ] ,else:[
+//   {return:"$output"}
+// ]},
+// 
+
+{set:"conn", "=":"db.connect('unicorn')"},
+
+// 进行存储
+{for:["index","item"], in:"rst_list", as:"list", loop:[
+  {if:"item.code != nil" ,then:[
+    {update:{sentence:""/*Q$={
+      INSERT INTO morning_paper_code_whitelist (
+        name,
+        code,
+        create_time,
+        update_time
+        )
+      VALUES
+        (${name}, ${code}, now(), now())
+      }=Q$*/, param:[
+      {name:"name",type:"string",value:"name"},
+      {name:"code",type:"string",value:"code"}
+    ]}, from:"item", to:"affect", by:"conn"}
+  ]},
+  {print:"'rst=%s'", from:["item.code"]}
+]},
+
+{return:"$output"}
+
